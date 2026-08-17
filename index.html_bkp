@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Device Wipe Control — Brass Ledger</title>
+<style>
+  :root {
+    --ink:       #E8E6E1;
+    --ink-dim:   #8A8880;
+    --panel:     #1C1D1B;
+    --panel-2:   #232420;
+    --line:      #33342F;
+    --amber:     #D98A2B;
+    --amber-dim: #8A5F22;
+    --red:       #C13B2E;
+    --red-bright:#E64B3B;
+    --green:     #4C9A5A;
+    --mono:      'SF Mono', 'Consolas', 'Courier New', monospace;
+    --sans:      -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0;
+    background: #131311;
+    color: var(--ink);
+    font-family: var(--sans);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+  }
+
+  /* ── Header strip: identifies this as a control panel, not an app ───────── */
+  .headerstrip {
+    background: var(--panel);
+    border-bottom: 1px solid var(--line);
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .headerstrip .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--ink-dim);
+    flex-shrink: 0;
+  }
+  .headerstrip .dot.connected { background: var(--green); box-shadow: 0 0 8px var(--green); }
+  .headerstrip .dot.armed     { background: var(--red-bright); box-shadow: 0 0 8px var(--red-bright); animation: pulse 1.4s infinite; }
+  @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:.4; } }
+  .headerstrip .label {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+  }
+  .headerstrip .label b { color: var(--ink); font-weight: 600; }
+
+  main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 28px 20px 40px;
+    max-width: 480px;
+    margin: 0 auto;
+    width: 100%;
+  }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--amber);
+    margin-bottom: 6px;
+  }
+  h1 {
+    font-size: 22px;
+    font-weight: 600;
+    margin: 0 0 4px;
+    letter-spacing: -0.01em;
+  }
+  .sub {
+    font-size: 13.5px;
+    color: var(--ink-dim);
+    line-height: 1.6;
+    margin-bottom: 28px;
+  }
+
+  /* ── Sign-in card ─────────────────────────────────────────────────────── */
+  .card {
+    width: 100%;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+  .card-title {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink-dim);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    padding: 14px 18px;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+    font-family: var(--sans);
+    transition: transform .08s ease, opacity .15s ease;
+  }
+  .btn:active { transform: scale(0.98); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-google {
+    background: var(--panel-2);
+    color: var(--ink);
+    border: 1px solid var(--line);
+  }
+  .btn-google:hover { border-color: var(--ink-dim); }
+
+  /* ── Device status list ──────────────────────────────────────────────── */
+  .device-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .device-row:last-child { border-bottom: none; }
+  .device-row .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
+  .device-row .name { flex: 1; font-size: 13.5px; font-weight: 500; }
+  .device-row .meta { font-size: 11px; color: var(--ink-dim); font-family: var(--mono); }
+
+  /* ── The big red control ──────────────────────────────────────────────── */
+  .wipe-zone {
+    width: 100%;
+    border: 1px solid var(--red);
+    border-radius: 10px;
+    background: linear-gradient(180deg, rgba(193,59,46,0.07), rgba(193,59,46,0.02));
+    padding: 20px;
+    margin-top: 8px;
+  }
+  .wipe-zone .card-title { color: var(--red-bright); }
+  .wipe-zone p {
+    font-size: 12.5px;
+    color: var(--ink-dim);
+    line-height: 1.6;
+    margin: 0 0 16px;
+  }
+  .btn-wipe {
+    background: var(--red);
+    color: #fff;
+    font-family: var(--mono);
+    letter-spacing: 0.04em;
+  }
+  .btn-wipe:hover { background: var(--red-bright); }
+
+  /* ── Confirmation step ────────────────────────────────────────────────── */
+  .confirm-input {
+    width: 100%;
+    padding: 14px;
+    font-family: var(--mono);
+    font-size: 16px;
+    letter-spacing: 0.15em;
+    text-align: center;
+    text-transform: uppercase;
+    background: #0D0D0C;
+    border: 1px solid var(--red);
+    border-radius: 8px;
+    color: var(--ink);
+    margin-bottom: 14px;
+  }
+  .confirm-input::placeholder { color: var(--ink-dim); letter-spacing: 0.05em; text-transform: none; }
+  .confirm-input:focus { outline: none; border-color: var(--red-bright); box-shadow: 0 0 0 3px rgba(230,75,59,0.15); }
+
+  /* ── Status / result banner ───────────────────────────────────────────── */
+  .banner {
+    width: 100%;
+    padding: 16px 18px;
+    border-radius: 8px;
+    font-size: 13.5px;
+    line-height: 1.6;
+    display: none;
+    margin-bottom: 16px;
+  }
+  .banner.show { display: block; }
+  .banner.success { background: rgba(76,154,90,0.12); border: 1px solid var(--green); color: #8FCB9A; }
+  .banner.error   { background: rgba(193,59,46,0.12); border: 1px solid var(--red); color: #F0A79E; }
+  .banner.info    { background: rgba(217,138,43,0.1); border: 1px solid var(--amber-dim); color: #E5B673; }
+  .banner b { font-family: var(--mono); }
+
+  /* ── Footer ───────────────────────────────────────────────────────────── */
+  footer {
+    text-align: center;
+    padding: 18px 20px 28px;
+    font-size: 11px;
+    color: var(--ink-dim);
+    font-family: var(--mono);
+    line-height: 1.7;
+  }
+  footer a { color: var(--amber); text-decoration: none; }
+
+  .hidden { display: none !important; }
+  .spinner {
+    width: 16px; height: 16px;
+    border: 2px solid rgba(255,255,255,0.25);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+  <div class="headerstrip">
+    <div class="dot" id="conn-dot"></div>
+    <div class="label">REMOTE&nbsp;CONTROL &nbsp;·&nbsp; <b id="conn-label">NOT CONNECTED</b></div>
+  </div>
+
+  <main>
+    <div class="eyebrow">Brass Ledger — Device Management</div>
+    <h1>Device Wipe Control</h1>
+    <div class="sub">
+      Sign in with the same Google account used for Drive Sync on the device.
+      This page sets a flag that the device checks every 5 minutes — once set,
+      the device backs up its data to Drive, then permanently erases its
+      local database. This cannot be undone from here.
+    </div>
+
+    <!-- ── Step 1: Sign in ─────────────────────────────────────────────── -->
+    <div class="card" id="signin-card">
+      <div class="card-title">🔐 Step 1 — Connect</div>
+      <button class="btn btn-google" id="btn-signin">
+        <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.9 2.4 30.4 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.1 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.6c-.5 3-2.2 5.5-4.7 7.2l7.3 5.7C43.9 37.2 46.5 31.3 46.5 24.5z"/><path fill="#FBBC05" d="M10.5 28.5c-.5-1.4-.8-3-.8-4.5s.3-3.1.8-4.5L2.6 13.2C1 16.4 0 20.1 0 24s1 7.6 2.6 10.8l7.9-6.3z"/><path fill="#34A853" d="M24 48c6.4 0 11.9-2.1 15.9-5.8l-7.3-5.7c-2.1 1.4-4.8 2.3-8.6 2.3-6.3 0-11.6-4.1-13.5-9.8l-7.9 6.1C6.5 42.6 14.6 48 24 48z"/></svg>
+        Sign in with Google
+      </button>
+    </div>
+
+    <!-- ── Step 2: Device found ─────────────────────────────────────────── -->
+    <div class="card hidden" id="device-card">
+      <div class="card-title">📟 Step 2 — Device</div>
+      <div class="device-row">
+        <div class="dot"></div>
+        <div class="name" id="device-name">BrassLedger</div>
+        <div class="meta" id="device-meta">checking…</div>
+      </div>
+    </div>
+
+    <!-- ── Banners ──────────────────────────────────────────────────────── -->
+    <div class="banner" id="banner"></div>
+
+    <!-- ── Step 3: Wipe control ─────────────────────────────────────────── -->
+    <div class="wipe-zone hidden" id="wipe-card">
+      <div class="card-title">⛔ Step 3 — Wipe this device</div>
+      <p id="wipe-idle-text">
+        The device will back up its data to Drive automatically, then permanently
+        delete its local database and local backups. No confirmation happens
+        on the device itself — this is unattended by design.
+      </p>
+
+      <div id="wipe-idle">
+        <button class="btn btn-wipe" id="btn-arm">ARM DEVICE WIPE</button>
+      </div>
+
+      <div id="wipe-confirm" class="hidden">
+        <p style="color:var(--red-bright);font-weight:600;">
+          Type <b style="font-family:var(--mono);">WIPE</b> to confirm. This takes effect
+          within 5 minutes and cannot be recalled once the device checks in.
+        </p>
+        <input type="text" class="confirm-input" id="confirm-input" placeholder="TYPE WIPE" autocomplete="off" autocapitalize="characters" />
+        <button class="btn btn-wipe" id="btn-confirm-wipe" disabled>
+          <span id="confirm-btn-label">CONFIRM — SET WIPE FLAG</span>
+        </button>
+        <button class="btn btn-google" id="btn-cancel-arm" style="margin-top:8px;">Cancel</button>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    Brass Ledger · Remote Device Control<br>
+    Flag file lives in your Drive folder as <b>remote-wipe.json</b><br>
+    <a href="#" id="reset-link">Reset connection</a>
+  </footer>
+
+<script>
+(function () {
+  'use strict';
+
+  // ══════════════════════════════════════════════════════════════════════
+  // CONFIGURE THIS: paste your OAuth Client ID from Google Cloud Console.
+  // Must be an "OAuth client ID" of type "Web application" with this
+  // page's URL added under "Authorized JavaScript origins" and
+  // "Authorized redirect URIs" (same URL, no path needed for implicit flow).
+  // This is the SAME Google Cloud project used for Drive Sync in the app —
+  // just add a second OAuth client of type "Web application" to it.
+  // ══════════════════════════════════════════════════════════════════════
+  const CLIENT_ID = '664047970400-qqoee3qeu5vc70tk92on3r7j840so36a.apps.googleusercontent.com';
+
+  const SCOPES = 'https://www.googleapis.com/auth/drive.file';
+  const FOLDER_NAME = 'BrassLedger';
+  const FLAG_FILE_NAME = 'remote-wipe.json';
+  const TOKEN_STORAGE_KEY = 'bl_wipe_ctrl_token';
+
+  let accessToken = null;
+  let folderId    = null;
+  let flagFileId  = null;
+
+  const $ = (id) => document.getElementById(id);
+
+  function showBanner(msg, kind) {
+    const b = $('banner');
+    b.innerHTML = msg;
+    b.className = 'banner show ' + kind;
+  }
+  function hideBanner() {
+    $('banner').className = 'banner';
+  }
+  function setConnected(isConnected) {
+    $('conn-dot').className = 'dot' + (isConnected ? ' connected' : '');
+    $('conn-label').textContent = isConnected ? 'CONNECTED' : 'NOT CONNECTED';
+  }
+
+  // ── OAuth: implicit flow, works in any mobile browser, no backend ───────────
+  function startSignIn() {
+    const redirectUri = window.location.origin + window.location.pathname;
+    const params = new URLSearchParams({
+      client_id:     CLIENT_ID,
+      redirect_uri:  redirectUri,
+      response_type: 'token',
+      scope:         SCOPES,
+      include_granted_scopes: 'true',
+      prompt: 'consent',
+    });
+    window.location.href = 'https://accounts.google.com/o/oauth2/v2/auth?' + params.toString();
+  }
+
+  function extractTokenFromUrl() {
+    const hash = window.location.hash;
+    if (!hash || hash.length < 2) return null;
+    const params = new URLSearchParams(hash.substring(1));
+    const token = params.get('access_token');
+    const expiresIn = parseInt(params.get('expires_in') || '3600', 10);
+    if (token) {
+      // Clear the hash so the token doesn't linger in browser history/URL bar
+      history.replaceState(null, '', window.location.pathname);
+      const expiry = Date.now() + expiresIn * 1000;
+      sessionStorage.setItem(TOKEN_STORAGE_KEY, JSON.stringify({ token, expiry }));
+      return token;
+    }
+    return null;
+  }
+
+  function getStoredToken() {
+    try {
+      const raw = sessionStorage.getItem(TOKEN_STORAGE_KEY);
+      if (!raw) return null;
+      const { token, expiry } = JSON.parse(raw);
+      if (Date.now() > expiry - 60000) return null; // expired or about to
+      return token;
+    } catch (_) { return null; }
+  }
+
+  // ── Drive REST helpers (mirrors the desktop app's approach) ─────────────────
+  async function driveFetch(url, opts = {}) {
+    const res = await fetch(url, {
+      ...opts,
+      headers: { ...(opts.headers || {}), Authorization: 'Bearer ' + accessToken },
+    });
+    if (res.status === 401) {
+      sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+      throw new Error('Session expired. Please sign in again.');
+    }
+    return res;
+  }
+
+  async function findOrCreateFolder() {
+    const q = encodeURIComponent(`name='${FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false`);
+    const res = await driveFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)`);
+    const data = await res.json();
+    if (data.files && data.files.length) return data.files[0].id;
+
+    const createRes = await driveFetch('https://www.googleapis.com/drive/v3/files', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: FOLDER_NAME, mimeType: 'application/vnd.google-apps.folder' }),
+    });
+    const folder = await createRes.json();
+    return folder.id;
+  }
+
+  async function findFlagFile() {
+    const q = encodeURIComponent(`name='${FLAG_FILE_NAME}' and '${folderId}' in parents and trashed=false`);
+    const res = await driveFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,modifiedTime)`);
+    const data = await res.json();
+    return (data.files && data.files[0]) || null;
+  }
+
+  async function readFlagFile(fileId) {
+    const res = await driveFetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`);
+    const text = await res.text();
+    try { return JSON.parse(text); } catch (_) { return null; }
+  }
+
+  async function writeFlagFile(fileId, data) {
+    const body = JSON.stringify(data, null, 2);
+    const res = await driveFetch(
+      `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`,
+      { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body }
+    );
+    if (!res.ok) throw new Error('Failed to update flag file: ' + res.status);
+    return res.json();
+  }
+
+  async function createFlagFile(data) {
+    const boundary = '-------BLWipeBoundary';
+    const meta = { name: FLAG_FILE_NAME, parents: [folderId] };
+    const body =
+      `--${boundary}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(meta)}\r\n` +
+      `--${boundary}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(data, null, 2)}\r\n` +
+      `--${boundary}--`;
+    const res = await driveFetch(
+      'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
+      { method: 'POST', headers: { 'Content-Type': `multipart/related; boundary=${boundary}` }, body }
+    );
+    return res.json();
+  }
+
+  // ── Main flow ────────────────────────────────────────────────────────────────
+  async function loadDeviceStatus() {
+    $('device-card').classList.remove('hidden');
+    $('device-meta').textContent = 'checking…';
+    try {
+      folderId = await findOrCreateFolder();
+      let flagFile = await findFlagFile();
+
+      if (!flagFile) {
+        flagFile = await createFlagFile({ wipe: false, updated_at: new Date().toISOString() });
+        showBanner('No wipe flag file found yet — created a new one, defaulted to safe (no wipe).', 'info');
+      }
+      flagFileId = flagFile.id;
+
+      const flagData = await readFlagFile(flagFileId);
+      const modified = flagFile.modifiedTime ? new Date(flagFile.modifiedTime).toLocaleString() : '—';
+      $('device-meta').textContent = 'last updated ' + modified;
+
+      if (flagData && flagData.last_wipe_executed_at) {
+        showBanner(
+          `<b>Last wipe executed:</b> ${new Date(flagData.last_wipe_executed_at).toLocaleString()}<br>` +
+          `Current flag state: <b>${flagData.wipe === true ? 'ARMED (true)' : 'safe (false)'}</b>`,
+          flagData.wipe === true ? 'error' : 'success'
+        );
+      } else if (flagData && flagData.wipe === true) {
+        showBanner('<b>⚠ Flag is currently set to TRUE.</b> Device will wipe on its next check-in (within 5 minutes) if still connected.', 'error');
+      }
+
+      $('wipe-card').classList.remove('hidden');
+    } catch (err) {
+      showBanner('Could not reach Drive: ' + err.message, 'error');
+    }
+  }
+
+  async function armWipe() {
+    const btn = $('btn-confirm-wipe');
+    btn.disabled = true;
+    $('confirm-btn-label').innerHTML = '<span class="spinner"></span>';
+    try {
+      await writeFlagFile(flagFileId, {
+        wipe: true,
+        set_by: 'remote-control-page',
+        set_at: new Date().toISOString(),
+      });
+      showBanner(
+        '<b>✓ Wipe flag set.</b> The device will detect this within 5 minutes, ' +
+        'back up its data to Drive, then permanently erase its local database.',
+        'error'
+      );
+      $('wipe-confirm').classList.add('hidden');
+      $('wipe-idle').classList.remove('hidden');
+      $('confirm-input').value = '';
+    } catch (err) {
+      showBanner('Failed to set wipe flag: ' + err.message, 'error');
+      btn.disabled = false;
+    }
+    $('confirm-btn-label').textContent = 'CONFIRM — SET WIPE FLAG';
+  }
+
+  // ── Wire up UI ───────────────────────────────────────────────────────────────
+  $('btn-signin').addEventListener('click', startSignIn);
+
+  $('btn-arm').addEventListener('click', () => {
+    $('wipe-idle').classList.add('hidden');
+    $('wipe-confirm').classList.remove('hidden');
+    $('confirm-input').focus();
+  });
+
+  $('btn-cancel-arm').addEventListener('click', () => {
+    $('wipe-confirm').classList.add('hidden');
+    $('wipe-idle').classList.remove('hidden');
+    $('confirm-input').value = '';
+    $('btn-confirm-wipe').disabled = true;
+  });
+
+  $('confirm-input').addEventListener('input', (e) => {
+    $('btn-confirm-wipe').disabled = e.target.value.trim().toUpperCase() !== 'WIPE';
+  });
+
+  $('btn-confirm-wipe').addEventListener('click', armWipe);
+
+  $('reset-link').addEventListener('click', (e) => {
+    e.preventDefault();
+    sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+    window.location.reload();
+  });
+
+  // ── Boot ─────────────────────────────────────────────────────────────────────
+  (function init() {
+    if (CLIENT_ID.indexOf('PASTE_YOUR') === 0) {
+      showBanner(
+        'This page is not configured yet. Open the file and replace <b>CLIENT_ID</b> ' +
+        'with your Google OAuth Web Client ID.',
+        'info'
+      );
+      return;
+    }
+
+    const urlToken = extractTokenFromUrl();
+    accessToken = urlToken || getStoredToken();
+
+    if (accessToken) {
+      setConnected(true);
+      $('signin-card').classList.add('hidden');
+      loadDeviceStatus();
+    } else {
+      setConnected(false);
+    }
+  })();
+})();
+</script>
+
+</body>
+</html>
